@@ -20,7 +20,4 @@
 
 #data   
 data/
-
-
-#text files
-*.txt
+docs/
