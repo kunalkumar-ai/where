@@ -1,19 +1,25 @@
-*.png
+# Python
+backend/venv/
+.venv/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.pyw
-*.pyz
-*.pywz
-*.pyzw
-*.pyzwz
 
-.DS_Store
+# Secrets
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
+# Node
+node_modules/
+dist/
+.next/
 
-.venv/
+# Data files (large, downloaded separately)
+backend/data/
+
+# OS
+.DS_Store
