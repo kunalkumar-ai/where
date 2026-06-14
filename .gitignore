@@ -15,5 +15,12 @@
 .env.test.local
 .env.production.local
 
-
+#virtual environment
 .venv/
+
+#data   
+data/
+
+
+#text files
+*.txt
