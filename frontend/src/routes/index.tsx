@@ -1,10 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Layers, Flame, Leaf, Zap, X } from "lucide-react";
+import { Layers, Flame, Leaf, Zap, Wind, X } from "lucide-react";
 
 import { EuropeMap } from "@/components/Map/EuropeMap";
-import { type LayerKey } from "@/components/Map/colors";
-import { fetchAllCountryData, type CountryDataMap, type CountryData } from "@/lib/api/client";
+import { type LayerKey, fuelColors } from "@/components/Map/colors";
+import {
+  fetchAllCountryData,
+  type CountryDataMap,
+  type CountryData,
+  type GenerationMix,
+} from "@/lib/api/client";
 import { countryDisplay } from "@/lib/countries";
 
 export const Route = createFileRoute("/")({
@@ -61,6 +66,14 @@ function Index() {
             color="text-success"
           />
           <LayerOption
+            label="Clean Energy %"
+            hint="nuclear + renewables"
+            active={activeLayer === "clean"}
+            onClick={() => setActiveLayer("clean")}
+            icon={<Wind className="h-3.5 w-3.5" />}
+            color="text-success"
+          />
+          <LayerOption
             label="Grid Interconnection"
             hint="exporter / importer"
             active={activeLayer === "interconnection"}
@@ -83,6 +96,7 @@ function Index() {
           <div className="mt-3 space-y-2 text-[11px]">
             {activeLayer === "prices" && <PriceLegend />}
             {activeLayer === "carbon" && <CarbonLegend />}
+            {activeLayer === "clean" && <CleanLegend />}
             {activeLayer === "interconnection" && <InterconnectionLegend />}
             {activeLayer === "none" && (
               <div className="text-muted-foreground">
@@ -211,6 +225,20 @@ function CarbonLegend() {
   );
 }
 
+function CleanLegend() {
+  return (
+    <LegendStops
+      stops={[
+        ["#10b981", "100% clean"],
+        ["#84cc16", "75%"],
+        ["#eab308", "50%"],
+        ["#f97316", "25%"],
+        ["#ef4444", "0% clean (all fossil)"],
+      ]}
+    />
+  );
+}
+
 function InterconnectionLegend() {
   return (
     <LegendStops
@@ -226,6 +254,7 @@ function InterconnectionLegend() {
 function DetailPanel({ iso3, data, onClose }: { iso3: string; data: CountryData; onClose: () => void }) {
   const info = countryDisplay(iso3);
   const interconn = "status" in data.interconnection ? data.interconnection : null;
+  const gen = "clean_share_pct" in data.generation ? data.generation : null;
 
   return (
     <div className="absolute inset-x-4 bottom-4 rounded-sm border border-border bg-card/95 shadow-2xl backdrop-blur">
@@ -247,7 +276,7 @@ function DetailPanel({ iso3, data, onClose }: { iso3: string; data: CountryData;
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="grid grid-cols-3 divide-x divide-border">
+      <div className="grid grid-cols-4 divide-x divide-border">
         <Metric
           label="Power Price"
           value={`€${data.price_eur_mwh.toFixed(0)}`}
@@ -260,6 +289,20 @@ function DetailPanel({ iso3, data, onClose }: { iso3: string; data: CountryData;
           unit="gCO₂/kWh"
           tone={
             data.carbon_gco2_kwh < 100 ? "good" : data.carbon_gco2_kwh < 300 ? "warn" : "bad"
+          }
+        />
+        <Metric
+          label="Clean Energy"
+          value={gen ? `${gen.clean_share_pct.toFixed(0)}` : "—"}
+          unit="%"
+          tone={
+            !gen
+              ? "warn"
+              : gen.clean_share_pct >= 75
+              ? "good"
+              : gen.clean_share_pct >= 40
+              ? "warn"
+              : "bad"
           }
         />
         <div className="px-5 py-4">
@@ -286,6 +329,63 @@ function DetailPanel({ iso3, data, onClose }: { iso3: string; data: CountryData;
             <div className="mt-2 text-[11px] text-muted-foreground">No data</div>
           )}
         </div>
+      </div>
+      {gen && <FuelMixBar mix={gen.mix_pct} />}
+    </div>
+  );
+}
+
+const FUEL_LABELS: Record<keyof GenerationMix, string> = {
+  coal: "Coal",
+  other_fossil: "Other Fossil",
+  gas: "Gas",
+  nuclear: "Nuclear",
+  hydro: "Hydro",
+  wind: "Wind",
+  solar: "Solar",
+  bioenergy: "Bioenergy",
+  other_renewables: "Other Renew.",
+};
+
+const FUEL_ORDER: Array<keyof GenerationMix> = [
+  "coal",
+  "other_fossil",
+  "gas",
+  "nuclear",
+  "hydro",
+  "wind",
+  "solar",
+  "bioenergy",
+  "other_renewables",
+];
+
+function FuelMixBar({ mix }: { mix: GenerationMix }) {
+  const entries = FUEL_ORDER.filter((k) => mix[k] >= 0.5);
+  const total = entries.reduce((s, k) => s + mix[k], 0) || 1;
+
+  return (
+    <div className="border-t border-border px-5 py-3">
+      <div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        Electricity Generation Mix
+      </div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-sm">
+        {entries.map((k) => (
+          <div
+            key={k}
+            style={{ width: `${(mix[k] / total) * 100}%`, backgroundColor: fuelColors[k] }}
+            title={`${FUEL_LABELS[k]} ${mix[k].toFixed(1)}%`}
+          />
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-[10px] sm:grid-cols-5">
+        {entries.map((k) => (
+          <div key={k} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: fuelColors[k] }} />
+            <span className="text-muted-foreground">
+              {FUEL_LABELS[k]} <span className="tabular-nums text-foreground">{mix[k].toFixed(1)}%</span>
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

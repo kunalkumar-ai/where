@@ -4,6 +4,7 @@ from services.data_loader import (
     get_prices,
     get_carbon,
     get_interconnection,
+    get_generation,
     get_all_country_data,
 )
 
@@ -64,3 +65,33 @@ def test_get_all_country_data_only_includes_matched_countries():
         assert "price_eur_mwh" in country_data
         assert "carbon_gco2_kwh" in country_data
         assert "interconnection" in country_data
+        assert "generation" in country_data
+
+
+def test_get_generation_norway_is_mostly_hydro():
+    gen = get_generation()
+    assert "NOR" in gen
+    assert gen["NOR"]["clean_share_pct"] > 90
+    assert gen["NOR"]["mix_pct"]["hydro"] > 70
+    assert gen["NOR"]["mix_pct"]["coal"] < 5
+
+
+def test_get_generation_france_is_mostly_nuclear():
+    gen = get_generation()
+    assert "FRA" in gen
+    assert gen["FRA"]["mix_pct"]["nuclear"] > 50
+    assert gen["FRA"]["clean_share_pct"] > 80
+
+
+def test_get_generation_poland_is_coal_heavy():
+    gen = get_generation()
+    assert "POL" in gen
+    assert gen["POL"]["mix_pct"]["coal"] > 30
+    assert gen["POL"]["clean_share_pct"] < 50
+
+
+def test_generation_mix_has_all_expected_fuel_keys():
+    gen = get_generation()
+    expected = {"coal", "gas", "nuclear", "hydro", "wind", "solar", "bioenergy", "other_fossil", "other_renewables"}
+    for code, data in gen.items():
+        assert set(data["mix_pct"].keys()) == expected, f"{code} mix_pct missing keys"

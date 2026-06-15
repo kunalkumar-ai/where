@@ -12,6 +12,7 @@ import {
   WORLD_MASK_OPACITY_ACTIVE,
   priceColorStops,
   carbonColorStops,
+  cleanShareColorStops,
   interconnectionStatusColor,
 } from "./colors";
 
@@ -189,9 +190,18 @@ function buildFillExpression(data: CountryDataMap, layer: LayerKey): ExpressionS
 
   for (const [iso, c] of Object.entries(data)) {
     let color: string;
-    if (layer === "prices") color = interpolate(c.price_eur_mwh, priceColorStops);
-    else if (layer === "carbon") color = interpolate(c.carbon_gco2_kwh, carbonColorStops);
-    else {
+    if (layer === "prices") {
+      color = interpolate(c.price_eur_mwh, priceColorStops);
+    } else if (layer === "carbon") {
+      color = interpolate(c.carbon_gco2_kwh, carbonColorStops);
+    } else if (layer === "clean") {
+      const cleanPct = "clean_share_pct" in c.generation ? c.generation.clean_share_pct : null;
+      if (cleanPct === null) {
+        matchCases.push(iso, NO_DATA_FILL);
+        continue;
+      }
+      color = interpolate(cleanPct, cleanShareColorStops);
+    } else {
       const status = "status" in c.interconnection ? c.interconnection.status : "balanced";
       color = interconnectionStatusColor[status] ?? NO_DATA_FILL;
     }

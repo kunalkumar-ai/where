@@ -6,10 +6,29 @@ export interface InterconnectionData {
   status: "exporter" | "importer" | "balanced";
 }
 
+export interface GenerationMix {
+  coal: number;
+  gas: number;
+  nuclear: number;
+  hydro: number;
+  wind: number;
+  solar: number;
+  bioenergy: number;
+  other_fossil: number;
+  other_renewables: number;
+}
+
+export interface GenerationData {
+  clean_share_pct: number;
+  renewable_share_pct: number;
+  mix_pct: GenerationMix;
+}
+
 export interface CountryData {
   price_eur_mwh: number;
   carbon_gco2_kwh: number;
   interconnection: InterconnectionData | Record<string, never>;
+  generation: GenerationData | Record<string, never>;
 }
 
 export type CountryDataMap = Record<string, CountryData>;

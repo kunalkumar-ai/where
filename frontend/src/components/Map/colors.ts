@@ -2,7 +2,27 @@
  * Color scales for map layers. Mapped to MapLibre `interpolate` expression stops.
  */
 
-export type LayerKey = "prices" | "carbon" | "interconnection" | "none";
+export type LayerKey = "prices" | "carbon" | "clean" | "interconnection" | "none";
+
+export const cleanShareColorStops: Array<[number, string]> = [
+  [0, "#ef4444"],
+  [25, "#f97316"],
+  [50, "#eab308"],
+  [75, "#84cc16"],
+  [100, "#10b981"],
+];
+
+export const fuelColors: Record<string, string> = {
+  coal: "#1f2937",
+  gas: "#f97316",
+  nuclear: "#a855f7",
+  hydro: "#06b6d4",
+  wind: "#22d3ee",
+  solar: "#fbbf24",
+  bioenergy: "#84cc16",
+  other_fossil: "#6b7280",
+  other_renewables: "#10b981",
+};
 
 export const NO_DATA_FILL = "rgba(0,0,0,0)";
 export const COUNTRY_OUTLINE = "#1f2937";

@@ -10,7 +10,12 @@ def load_all_data() -> None:
     _cache["prices"] = _load_prices()
     _cache["carbon"] = _load_carbon()
     _cache["interconnection"] = _load_interconnection()
-    print(f"Loaded: {len(_cache['prices'])} countries prices, {len(_cache['carbon'])} countries carbon")
+    _cache["generation"] = _load_generation_mix()
+    print(
+        f"Loaded: {len(_cache['prices'])} prices, "
+        f"{len(_cache['carbon'])} carbon, "
+        f"{len(_cache['generation'])} generation mix"
+    )
 
 
 def get_prices() -> dict[str, float]:
@@ -25,10 +30,15 @@ def get_interconnection() -> dict[str, dict]:
     return _cache.get("interconnection", {})
 
 
+def get_generation() -> dict[str, dict]:
+    return _cache.get("generation", {})
+
+
 def get_all_country_data() -> dict[str, dict]:
     prices = get_prices()
     carbon = get_carbon()
     interconnection = get_interconnection()
+    generation = get_generation()
 
     countries = set(prices.keys()) & set(carbon.keys())
     return {
@@ -36,6 +46,7 @@ def get_all_country_data() -> dict[str, dict]:
             "price_eur_mwh": prices[country],
             "carbon_gco2_kwh": carbon[country],
             "interconnection": interconnection.get(country, {}),
+            "generation": generation.get(country, {}),
         }
         for country in countries
     }
@@ -81,6 +92,51 @@ COUNTRY_NAME_TO_ISO3: dict[str, str] = {
     "Slovenia": "SVN", "Spain": "ESP", "Sweden": "SWE", "Switzerland": "CHE",
     "Tunisia": "TUN", "Turkiye": "TUR", "United Kingdom": "GBR",
 }
+
+
+FUEL_MIX_VARIABLES: list[str] = [
+    "Coal",
+    "Gas",
+    "Nuclear",
+    "Hydro",
+    "Wind",
+    "Solar",
+    "Bioenergy",
+    "Other Fossil",
+    "Other Renewables",
+]
+
+
+def _load_generation_mix() -> dict[str, dict]:
+    """Per-country generation mix: clean share %, renewable share %, fuel breakdown."""
+    path = DATA_DIR / "ember_yearly_europe.csv"
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip()
+
+    df = df[
+        (df["Category"] == "Electricity generation") &
+        (df["Continent"] == "Europe") &
+        (df["Area type"] == "Country or economy") &
+        (df["Unit"] == "%")
+    ]
+    latest_year = df["Year"].max()
+    df = df[df["Year"] == latest_year]
+
+    result: dict[str, dict] = {}
+    for iso3, group in df.groupby("ISO 3 code"):
+        values: dict[str, float] = dict(zip(group["Variable"], group["Value"]))
+
+        mix_pct: dict[str, float] = {}
+        for var in FUEL_MIX_VARIABLES:
+            key = var.lower().replace(" ", "_")
+            mix_pct[key] = round(float(values.get(var, 0.0)), 2)
+
+        result[iso3] = {
+            "clean_share_pct": round(float(values.get("Clean", 0.0)), 2),
+            "renewable_share_pct": round(float(values.get("Renewables", 0.0)), 2),
+            "mix_pct": mix_pct,
+        }
+    return result
 
 
 def _load_interconnection() -> dict[str, dict]:
