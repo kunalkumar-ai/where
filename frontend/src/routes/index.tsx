@@ -85,12 +85,8 @@ function Index() {
             {activeLayer === "carbon" && <CarbonLegend />}
             {activeLayer === "interconnection" && <InterconnectionLegend />}
             {activeLayer === "none" && (
-              <div className="text-muted-foreground">Select a layer to see the colour scale.</div>
-            )}
-            {activeLayer !== "none" && (
-              <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
-                <span className="h-3 w-5 rounded-sm border border-border bg-white" />
-                <span className="text-muted-foreground">No Ember data</span>
+              <div className="text-muted-foreground">
+                Browse mode: country borders and labels only. Choose a layer to colour the map.
               </div>
             )}
           </div>
@@ -106,8 +102,8 @@ function Index() {
             <span className="tabular-nums text-foreground">Ember</span>
           </div>
           <div className="mt-2 text-[10px] leading-relaxed">
-            Countries shown in white are European but missing from Ember pricing data
-            (e.g. Iceland, Switzerland, Ukraine, Bosnia). Click any country for details.
+            When a data layer is active, only the {countryCount} countries with Ember data are
+            shown. The rest of the world is dimmed to focus on the comparable set.
           </div>
         </div>
       </aside>

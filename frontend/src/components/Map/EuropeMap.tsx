@@ -8,6 +8,8 @@ import {
   NO_DATA_FILL,
   COUNTRY_OUTLINE,
   HOVER_OUTLINE,
+  WORLD_MASK_COLOR,
+  WORLD_MASK_OPACITY_ACTIVE,
   priceColorStops,
   carbonColorStops,
   interconnectionStatusColor,
@@ -22,8 +24,27 @@ interface EuropeMapProps {
 const TILE_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const GEOJSON_URL = "/europe.geojson";
 const SOURCE_ID = "countries";
+const MASK_SOURCE_ID = "world-cover";
+const MASK_LAYER_ID = "world-mask";
 const FILL_LAYER_ID = "country-fill";
 const OUTLINE_LAYER_ID = "country-outline";
+
+const WORLD_COVER_GEOJSON = {
+  type: "Feature" as const,
+  properties: {},
+  geometry: {
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [-180, 85],
+        [180, 85],
+        [180, -85],
+        [-180, -85],
+        [-180, 85],
+      ],
+    ],
+  },
+};
 
 export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,36 +70,64 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
       const res = await fetch(GEOJSON_URL);
       const geojson = await res.json();
 
+      // Find the first label/symbol layer so we can insert ours below it
+      // (this keeps country names rendered on top of our fills).
+      const firstSymbolId = map.getStyle().layers.find((l) => l.type === "symbol")?.id;
+
+      // Source 1: a polygon spanning the whole world — used to mask out
+      // non-European countries when a data layer is active.
+      map.addSource(MASK_SOURCE_ID, { type: "geojson", data: WORLD_COVER_GEOJSON });
+
+      map.addLayer(
+        {
+          id: MASK_LAYER_ID,
+          type: "fill",
+          source: MASK_SOURCE_ID,
+          paint: {
+            "fill-color": WORLD_MASK_COLOR,
+            "fill-opacity": 0,
+          },
+        },
+        firstSymbolId,
+      );
+
+      // Source 2: European country polygons.
       map.addSource(SOURCE_ID, {
         type: "geojson",
         data: geojson,
         promoteId: "iso_a3",
       });
 
-      map.addLayer({
-        id: FILL_LAYER_ID,
-        type: "fill",
-        source: SOURCE_ID,
-        paint: {
-          "fill-color": NO_DATA_FILL,
-          "fill-opacity": 0.85,
+      map.addLayer(
+        {
+          id: FILL_LAYER_ID,
+          type: "fill",
+          source: SOURCE_ID,
+          paint: {
+            "fill-color": NO_DATA_FILL,
+            "fill-opacity": 0.92,
+          },
         },
-      });
+        firstSymbolId,
+      );
 
-      map.addLayer({
-        id: OUTLINE_LAYER_ID,
-        type: "line",
-        source: SOURCE_ID,
-        paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["feature-state", "hover"], false],
-            HOVER_OUTLINE,
-            COUNTRY_OUTLINE,
-          ],
-          "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0.6],
+      map.addLayer(
+        {
+          id: OUTLINE_LAYER_ID,
+          type: "line",
+          source: SOURCE_ID,
+          paint: {
+            "line-color": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              HOVER_OUTLINE,
+              COUNTRY_OUTLINE,
+            ],
+            "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0.6],
+          },
         },
-      });
+        firstSymbolId,
+      );
 
       map.on("mousemove", FILL_LAYER_ID, (e) => {
         if (!e.features?.length) return;
@@ -114,7 +163,7 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update fill paint when the active layer or country data changes.
+  // Update fill paint and world mask when the active layer or data changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -122,6 +171,9 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
     const apply = () => {
       if (!map.getLayer(FILL_LAYER_ID)) return;
       map.setPaintProperty(FILL_LAYER_ID, "fill-color", buildFillExpression(countryData, activeLayer));
+
+      const maskOpacity = activeLayer === "none" ? 0 : WORLD_MASK_OPACITY_ACTIVE;
+      map.setPaintProperty(MASK_LAYER_ID, "fill-opacity", maskOpacity);
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
