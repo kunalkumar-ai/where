@@ -216,7 +216,7 @@ function InterconnectionLegend() {
     <LegendStops
       stops={[
         ["#10b981", "Net exporter"],
-        ["#6b7280", "Balanced"],
+        ["#3b82f6", "Balanced"],
         ["#ef4444", "Net importer"],
       ]}
     />

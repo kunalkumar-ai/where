@@ -28,6 +28,6 @@ export const carbonColorStops: Array<[number, string]> = [
 
 export const interconnectionStatusColor: Record<string, string> = {
   exporter: "#10b981",
-  balanced: "#6b7280",
+  balanced: "#3b82f6",
   importer: "#ef4444",
 };
