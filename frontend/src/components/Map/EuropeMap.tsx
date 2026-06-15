@@ -5,8 +5,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { CountryDataMap } from "@/lib/api/client";
 import {
   type LayerKey,
-  NO_DATA_COLOR,
+  NO_DATA_FILL,
+  COUNTRY_OUTLINE,
   HOVER_OUTLINE,
+  BACKGROUND_COLOR,
   priceColorStops,
   carbonColorStops,
   interconnectionStatusColor,
@@ -18,11 +20,22 @@ interface EuropeMapProps {
   onCountryClick?: (iso3: string) => void;
 }
 
-const TILE_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const GEOJSON_URL = "/europe.geojson";
 const SOURCE_ID = "countries";
 const FILL_LAYER_ID = "country-fill";
 const OUTLINE_LAYER_ID = "country-outline";
+
+const MINIMAL_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": BACKGROUND_COLOR },
+    },
+  ],
+};
 
 export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,12 +48,12 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: TILE_STYLE_URL,
+      style: MINIMAL_STYLE,
       center: [15, 54],
       zoom: 3.2,
       minZoom: 2,
       maxZoom: 7,
-      attributionControl: { compact: true },
+      attributionControl: false,
     });
     mapRef.current = map;
 
@@ -59,7 +72,7 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
         type: "fill",
         source: SOURCE_ID,
         paint: {
-          "fill-color": NO_DATA_COLOR,
+          "fill-color": NO_DATA_FILL,
           "fill-opacity": 0.85,
         },
       });
@@ -73,9 +86,9 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
             "case",
             ["boolean", ["feature-state", "hover"], false],
             HOVER_OUTLINE,
-            "#374151",
+            COUNTRY_OUTLINE,
           ],
-          "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0.5],
+          "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0.6],
         },
       });
 
@@ -130,7 +143,7 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
 }
 
 function buildFillExpression(data: CountryDataMap, layer: LayerKey): ExpressionSpecification | string {
-  if (layer === "none" || Object.keys(data).length === 0) return NO_DATA_COLOR;
+  if (layer === "none" || Object.keys(data).length === 0) return NO_DATA_FILL;
 
   const matchCases: (string | string[])[] = [];
 
@@ -140,12 +153,12 @@ function buildFillExpression(data: CountryDataMap, layer: LayerKey): ExpressionS
     else if (layer === "carbon") color = interpolate(c.carbon_gco2_kwh, carbonColorStops);
     else {
       const status = "status" in c.interconnection ? c.interconnection.status : "balanced";
-      color = interconnectionStatusColor[status] ?? NO_DATA_COLOR;
+      color = interconnectionStatusColor[status] ?? NO_DATA_FILL;
     }
     matchCases.push(iso, color);
   }
 
-  return ["match", ["get", "iso_a3"], ...matchCases, NO_DATA_COLOR] as unknown as ExpressionSpecification;
+  return ["match", ["get", "iso_a3"], ...matchCases, NO_DATA_FILL] as unknown as ExpressionSpecification;
 }
 
 function interpolate(value: number, stops: Array<[number, string]>): string {
