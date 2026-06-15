@@ -1,0 +1,65 @@
+#!/bin/bash
+# Pre-commit hook for Where project
+# Enforces engineering standards before allowing commits
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo "Running pre-commit checks..."
+
+# 1. Block .env files
+if git diff --cached --name-only | grep -E '(^|/)\.env$|(^|/)\.env\.(local|development|production|test)' > /dev/null; then
+    echo -e "${RED}BLOCKED:${NC} You are trying to commit a .env file."
+    echo "Secrets must never be committed. Remove with: git reset HEAD <file>"
+    exit 1
+fi
+
+# 2. Block obvious API key patterns (exclude .githooks/ to avoid self-match on the regex itself)
+STAGED_NON_HOOK=$(git diff --cached --name-only | grep -v '^.githooks/' || true)
+if [ -n "$STAGED_NON_HOOK" ]; then
+    if echo "$STAGED_NON_HOOK" | xargs git diff --cached -U0 -- 2>/dev/null | grep -E '^\+.*(sk-ant-[a-zA-Z0-9_-]{20,}|AKIA[0-9A-Z]{16})' > /dev/null; then
+        echo -e "${RED}BLOCKED:${NC} Possible API key detected in staged changes."
+        echo "Review your diff and move the key to backend/.env"
+        exit 1
+    fi
+fi
+
+# 3. Run backend tests if backend files changed
+BACKEND_CHANGED=$(git diff --cached --name-only | grep -E '^backend/.*\.py$' | grep -v '__pycache__' || true)
+
+if [ -n "$BACKEND_CHANGED" ]; then
+    echo "Backend Python files changed — running pytest..."
+
+    if [ ! -d "backend/venv" ]; then
+        echo -e "${YELLOW}WARNING:${NC} backend/venv not found, skipping tests."
+        echo "Create it with: cd backend && python3 -m venv venv && pip install -r requirements.txt"
+    else
+        cd backend
+        source venv/bin/activate
+        if ! pytest -q 2>&1; then
+            echo -e "${RED}BLOCKED:${NC} Tests failed. Fix tests before committing."
+            exit 1
+        fi
+        deactivate 2>/dev/null || true
+        cd ..
+    fi
+fi
+
+# 4. Check every backend/services/*.py has matching test file
+SERVICES_CHANGED=$(git diff --cached --name-only | grep -E '^backend/services/[^_].*\.py$' || true)
+
+for service in $SERVICES_CHANGED; do
+    name=$(basename "$service" .py)
+    test_file="backend/tests/test_${name}.py"
+    if [ ! -f "$test_file" ]; then
+        echo -e "${RED}BLOCKED:${NC} Service $service has no matching test file $test_file"
+        echo "Every service in backend/services/ must have a test in backend/tests/"
+        exit 1
+    fi
+done
+
+echo -e "${GREEN}All pre-commit checks passed.${NC}"

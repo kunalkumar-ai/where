@@ -35,7 +35,9 @@ These rules are enforced by git hooks and GitHub Actions. Bypassing them is a bu
    - After merging to main: immediately delete both local AND remote branch
    - Never commit to main directly
 
-If a hook seems wrong, fix the hook in `.git/hooks/` or `.github/workflows/` — don't skip it.
+If a hook seems wrong, fix it in `.githooks/` or `.github/workflows/` — don't skip it.
+
+**After cloning the repo:** run `./setup.sh` once to activate the hooks (configures `core.hooksPath`).
 
 ---
 
