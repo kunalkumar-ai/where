@@ -4,10 +4,9 @@
 
 export type LayerKey = "prices" | "carbon" | "interconnection" | "none";
 
-export const NO_DATA_FILL = "transparent";
-export const COUNTRY_OUTLINE = "#475569";
+export const NO_DATA_FILL = "#ffffff";
+export const COUNTRY_OUTLINE = "#1f2937";
 export const HOVER_OUTLINE = "#fbbf24";
-export const BACKGROUND_COLOR = "#0a0e1a";
 
 export const priceColorStops: Array<[number, string]> = [
   [30, "#10b981"],

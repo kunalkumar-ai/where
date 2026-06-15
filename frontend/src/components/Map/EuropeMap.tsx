@@ -8,7 +8,6 @@ import {
   NO_DATA_FILL,
   COUNTRY_OUTLINE,
   HOVER_OUTLINE,
-  BACKGROUND_COLOR,
   priceColorStops,
   carbonColorStops,
   interconnectionStatusColor,
@@ -20,22 +19,11 @@ interface EuropeMapProps {
   onCountryClick?: (iso3: string) => void;
 }
 
+const TILE_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const GEOJSON_URL = "/europe.geojson";
 const SOURCE_ID = "countries";
 const FILL_LAYER_ID = "country-fill";
 const OUTLINE_LAYER_ID = "country-outline";
-
-const MINIMAL_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": BACKGROUND_COLOR },
-    },
-  ],
-};
 
 export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,12 +36,12 @@ export function EuropeMap({ countryData, activeLayer, onCountryClick }: EuropeMa
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MINIMAL_STYLE,
+      style: TILE_STYLE_URL,
       center: [15, 54],
       zoom: 3.2,
       minZoom: 2,
       maxZoom: 7,
-      attributionControl: false,
+      attributionControl: { compact: true },
     });
     mapRef.current = map;
 
