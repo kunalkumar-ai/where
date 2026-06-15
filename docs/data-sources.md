@@ -270,3 +270,49 @@ Load in this order — heavier files last so the API is responsive quickly:
 6. `pypsa_network.nc` — large, takes a few seconds
 
 All loaded once into memory at FastAPI startup. Never reloaded per request.
+
+---
+
+## Country Coverage
+
+The map (`frontend/public/europe.geojson`) draws **52 European countries**.
+Backend Ember data only covers **31** of them with prices.
+
+The 21 countries on the map without price data fall into two groups:
+
+### Real data center candidates (genuine gaps — fix later if needed)
+
+These ARE valid European countries that could host data centers. We just lack Ember price data.
+
+| ISO3 | Country | Carbon data? | Notes |
+|------|---------|--------------|-------|
+| ALB  | Albania | yes | |
+| BIH  | Bosnia and Herzegovina | yes | |
+| BLR  | Belarus | yes | sanctions/political risk in 2026 |
+| CYP  | Cyprus | yes | island grid, isolated |
+| ISL  | Iceland | yes | **already a major DC hub** — geothermal, free cooling |
+| KOS  | Kosovo | no | |
+| MDA  | Moldova | yes | |
+| MLT  | Malta | yes | small island grid |
+| RUS  | Russia | yes | sanctions/political risk in 2026 |
+| TUR  | Turkey | no | |
+| UKR  | Ukraine | yes | active conflict in 2026, not viable |
+
+**If a user asks about any of these:** be honest that we have no price data, do NOT make up numbers. Iceland in particular is a real omission worth fixing if a user cares.
+
+### Micro-states (skip — not real DC candidates)
+
+Too small for hyperscale data centers and Ember rightly omits them.
+
+`ALD` Åland, `AND` Andorra, `FRO` Faeroe Islands, `GGY` Guernsey, `IMN` Isle of Man, `JEY` Jersey, `LIE` Liechtenstein, `MCO` Monaco, `SMR` San Marino, `VAT` Vatican.
+
+### How the frontend handles these
+
+Countries without backend data render gray on the map.
+Country click → info panel shows "no data available" rather than fabricating values.
+
+---
+
+## Bug Rule (For This Project)
+
+If a country exists in `europe.geojson` but is missing from backend data, that is **expected behavior**, not a bug. Only log a bug in `docs/bugs.md` if a country we SHOULD have data for is missing (e.g. Germany suddenly disappears from prices).
