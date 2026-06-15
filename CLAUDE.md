@@ -22,6 +22,25 @@ Three tools:
 
 ---
 
+## Hard Rules (Mechanically Enforced — Do Not Try to Bypass)
+
+These rules are enforced by git hooks and GitHub Actions. Bypassing them is a bug, not a shortcut.
+
+1. **Tests are not optional.** Every file in `backend/services/` MUST have a matching `backend/tests/test_<name>.py`. The pre-commit hook blocks commits that violate this.
+2. **Pytest must pass before every commit.** The pre-commit hook runs `pytest` automatically. Do not commit if it fails — fix the code instead.
+3. **Commit message format is enforced.** Must start with `feat:`, `fix:`, `chore:`, `test:`, `docs:`, or `refactor:`. The commit-msg hook will reject anything else.
+4. **Never bypass hooks with `--no-verify`.** If a hook blocks you, the hook is right. Fix the underlying issue.
+5. **Branch and merge workflow:**
+   - One branch per phase: `feature/phase-N-<topic>`
+   - After merging to main: immediately delete both local AND remote branch
+   - Never commit to main directly
+
+If a hook seems wrong, fix it in `.githooks/` or `.github/workflows/` — don't skip it.
+
+**After cloning the repo:** run `./setup.sh` once to activate the hooks (configures `core.hooksPath`).
+
+---
+
 ## How to Run the Project
 
 **Backend:**
