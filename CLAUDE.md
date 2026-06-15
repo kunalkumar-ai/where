@@ -41,6 +41,34 @@ If a hook seems wrong, fix it in `.githooks/` or `.github/workflows/` — don't 
 
 ---
 
+## Bug Logging Rule
+
+When fixing a non-obvious bug, you MUST add an entry to `@docs/bugs.md` before the commit. This is a hard rule — the bug log only stays useful if it actually gets written.
+
+**Entry format:**
+```
+## BUG-XXX: <one-line title>
+**What broke:** ...
+**Root cause:** ...
+**Fix:** ...
+**Rule going forward:** ...
+```
+
+**When to log (always):**
+- Data format assumptions that turned out wrong (column names, encoding, missing rows)
+- Library gotchas (silent API changes, version mismatches)
+- Edge cases that bypassed validation
+- Performance regressions
+- Anything a future engineer or Claude could repeat
+
+**When to skip:**
+- Typos, missing imports, obvious syntax errors
+- Trivial one-line tweaks a developer would spot immediately
+
+**The decision rule:** "Would a smart developer make this same mistake again?" If yes → log it. If no → skip.
+
+---
+
 ## How to Run the Project
 
 **Backend:**
@@ -53,12 +81,12 @@ uvicorn main:app --reload --port 8000
 **Frontend:**
 ```bash
 cd frontend
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
 Backend runs on `http://localhost:8000`
-Frontend runs on `http://localhost:5173`
+Frontend runs on `http://localhost:8080` (Vite config in `frontend/vite.config.ts`)
 
 **Run backend tests:**
 ```bash

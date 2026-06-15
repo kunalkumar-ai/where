@@ -1,5 +1,11 @@
 from fastapi import APIRouter
-from services.data_loader import get_prices, get_carbon, get_interconnection, get_all_country_data
+from services.data_loader import (
+    get_prices,
+    get_carbon,
+    get_interconnection,
+    get_generation,
+    get_all_country_data,
+)
 
 router = APIRouter(tags=["map"])
 
@@ -22,3 +28,8 @@ def get_carbon_data() -> dict[str, float]:
 @router.get("/interconnection")
 def get_interconnection_data() -> dict:
     return get_interconnection()
+
+
+@router.get("/generation")
+def get_generation_data() -> dict:
+    return get_generation()

@@ -116,14 +116,27 @@ where/
 2. Install all dependencies
 3. Build `data_loader.py` — load Ember prices, carbon, congestion data
 4. Build `/api/map-data` endpoints — serve GeoJSON layers
-5. Build MapLibre map in React with toggleable layers:
-   - Power prices (color gradient by country)
-   - Carbon intensity (color gradient)
-   - Grid congestion (green / amber / red)
-   - Existing data centers (dots)
-6. Click a country → popup showing all metrics
+5. Build MapLibre map in React with single-select map layers:
+   - **Power Prices** — €/MWh annual average per country, green→red gradient
+   - **Carbon Intensity** — gCO₂/kWh, green→red gradient
+   - **Clean Energy %** — nuclear + renewables share, 0–100% red→green gradient
+   - **Grid Interconnection** — net exporter (green) / balanced (blue) / importer (red)
+6. Click a country → bottom panel showing all 4 metrics + electricity generation mix breakdown bar (Coal/Gas/Nuclear/Hydro/Wind/Solar/Bio/Other)
 
-**Done when:** Map renders with all layers, country click shows real data.
+**Frontend integration approach (hybrid):**
+- Keep the Lovable-generated shell as-is — sidebar, country info panel, navigation, dark theme, all routes
+- Replace the central stylized map area with a real MapLibre GL JS map
+- Base tiles: MapLibre demo tiles (free, no API key)
+- API client at `frontend/src/lib/api/client.ts` fetches `/api/map-data/all`
+- Country shapes come from a Natural Earth GeoJSON in `frontend/public/europe.geojson` (52 European countries)
+- All MapLibre fill layers are inserted BELOW the basemap's symbol labels so country names always stay visible
+- When a data layer is active, a dark world-mask layer dims the non-European world to keep visual focus on the comparable set
+
+**Layer behaviour:**
+- "No layer" mode → bare pastel basemap with names visible (browse mode)
+- Any data layer active → world-mask appears, only the European countries with backend data show colour, no-data European countries become transparent (mask shows through, effectively hidden)
+
+**Done when:** Map renders with real European country shapes, all four data layers + "No layer" toggleable, country click shows real data from the FastAPI backend.
 
 ---
 
@@ -193,10 +206,14 @@ Write a 2-sentence explanation of why this mix was chosen and what the client sh
 ## API Endpoints
 
 ```
-GET  /api/map-data/prices        → GeoJSON with price per country
-GET  /api/map-data/carbon        → GeoJSON with carbon intensity
-GET  /api/map-data/congestion    → GeoJSON with grid congestion
-GET  /api/map-data/datacenters   → GeoJSON points of existing DCs
+GET  /api/map-data/all              → All data per country (see shape below)
+GET  /api/map-data/prices           → {iso3: price_eur_mwh}
+GET  /api/map-data/carbon           → {iso3: carbon_gco2_kwh}
+GET  /api/map-data/interconnection  → {iso3: {renewable_share_pct, net_position_twh, status}}
+GET  /api/map-data/generation       → {iso3: {clean_share_pct, renewable_share_pct, mix_pct: {coal, gas, nuclear, hydro, wind, solar, bioenergy, other_fossil, other_renewables}}}
+
+# /all returns the union, keyed by ISO3 — used by the map page on mount:
+# { "FRA": { price_eur_mwh, carbon_gco2_kwh, interconnection: {...}, generation: {...} }, ... }
 
 POST /api/recommend
   Body:    { "mw": 100, "priorities": { "cost": 0.4, "carbon": 0.3, "congestion": 0.2, "connectivity": 0.1 } }

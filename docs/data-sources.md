@@ -74,54 +74,77 @@ Carbon score per location. Critical for sustainability-focused clients.
 - Export as CSV filtered to European countries, latest year
 
 **Format:**
-- CSV file
-- Key columns: `country`, `year`, `carbon_intensity_gco2_kwh`, `clean_share_pct`
+- CSV file with long format — one row per (country, year, variable)
+- Key columns: `Area`, `ISO 3 code`, `Year`, `Category`, `Variable`, `Unit`, `Value`
+- Filter on `Continent == "Europe"` to get European countries only
+
+**Two extractions from this one file:**
+
+1. **Carbon intensity** — rows where `Variable == "CO2 intensity"` → `gCO₂/kWh` per country, latest year
+2. **Generation mix** — rows where `Category == "Electricity generation"`, `Unit == "%"` → fuel breakdown per country:
+   - `Clean` (% from nuclear + renewables)
+   - `Renewables` (% from non-nuclear clean)
+   - Individual fuels: `Coal`, `Gas`, `Nuclear`, `Hydro`, `Wind`, `Solar`, `Bioenergy`, `Other Fossil`, `Other Renewables`
 
 **Reference values (sanity check):**
-| Country | Approx Carbon Intensity |
-|---|---|
-| Norway | ~20 gCO₂/kWh |
-| France | ~50 gCO₂/kWh |
-| Germany | ~350 gCO₂/kWh |
-| Poland | ~650 gCO₂/kWh |
+| Country | Approx Carbon | Approx Mix |
+|---|---|---|
+| Norway | ~20 gCO₂/kWh | ~89% hydro, ~9% wind |
+| France | ~50 gCO₂/kWh | ~69% nuclear, ~10% hydro |
+| Germany | ~330 gCO₂/kWh | mixed — coal/gas + renewables ramp |
+| Poland | ~590 gCO₂/kWh | ~30%+ coal |
 
-Use these to validate data loaded correctly. If Norway shows >100, something is wrong.
+Use these to validate data loaded correctly. If Norway shows >100 gCO₂/kWh or France shows <30% nuclear, something is wrong.
 
 **Gotchas:**
 - Same country coverage limitation as prices — validate before use
 - Carbon intensity changes year to year — always use latest full year
+- The file has ~20 different Variables; filter carefully or you'll mix metrics
 
 **Where to store locally:**
-`backend/data/ember_carbon.csv`
+`backend/data/ember_yearly_europe.csv`
 
 ---
 
-## 4. Grid Congestion — Ember Grids for Data Centres
+## 4. Grid Interconnection — Ember Europe Electricity Interconnection Data
 
 **What it is:**
-A dedicated Ember dataset built specifically for data center siting. Identifies where there is available grid capacity vs congestion across Europe.
+Cross-border electricity flow and capacity data across European countries — who exports, who imports, how much, and via what borders.
 
-**What it gives us:**
-- Available grid capacity by region (can you actually connect here?)
-- Grid connection costs (€1M to €100M+ depending on location)
-- Connection timelines (2–10 years in some countries)
+**What it gives us (Phase 1):**
+Per country: a net position (TWh/year exported minus imported) and a derived status — **net exporter**, **balanced**, or **net importer**.
+
+**What we don't use yet (potential Phase 2):**
+- Cross-border flows file (which country sends power to which)
+- NTC (Net Transfer Capacity) per border — would show specific grid bottlenecks
+- Peak demand per country
+- 2030 / 2040 forecast scenarios
 
 **Where to get it:**
-- Ember Grids for data centres report
-- ember-climate.org — search "grids for data centres"
-- Data may need manual extraction from report into a structured JSON
+- ember-climate.org → "Europe Electricity Interconnection Data" (Datasets card, not the interactive Tool)
+- Download as a zip
 
 **Format:**
-- Likely PDF report with tables — extract key data manually into:
-`backend/data/grid_congestion.json`
+- Folder structure under `backend/data/europe_interconnection_data/`
+- File we actually use: `Country indicators/country_monthly_chart_2024.csv`
+- Key columns: `Country` (full name), `Month`, `RES-E` (renewable share %), `NET-P` (net position TWh)
 
-```json
-{
-  "IE": { "status": "congested", "connection_years": 7, "note": "Dublin grid full" },
-  "FI": { "status": "available", "connection_years": 2, "note": "Good headroom" },
-  ...
-}
-```
+**Threshold for status (chosen by us):**
+- `NET-P > +5 TWh/year` → `exporter` (sends meaningful surplus to neighbors)
+- `-5 ≤ NET-P ≤ +5 TWh/year` → `balanced` (production ≈ consumption)
+- `NET-P < -5 TWh/year` → `importer` (relies on neighbors)
+
+**Why this matters for data centers:**
+- **Exporter** → grid likely has surplus capacity, often a better target for new big loads (Norway, France, Sweden)
+- **Importer** → grid often near capacity, harder to plug a new 100MW load (Germany, Belgium, Italy)
+- **Balanced** → case by case
+
+**Gotchas:**
+- File uses full country names (Austria, Belgium, etc.) — we map to ISO3 in the loader (see `COUNTRY_NAME_TO_ISO3` in `data_loader.py`). New countries Ember adds will silently disappear from results until added to the map.
+- The ±5 TWh threshold is a project choice, not a physical rule. Revisit if it produces misleading labels for a specific country.
+
+**Where to store locally:**
+`backend/data/europe_interconnection_data/` (folder, keep structure as Ember ships it)
 
 **Gotchas:**
 - This is the most critical factor — cheap clean power means nothing if you cannot connect
@@ -270,3 +293,49 @@ Load in this order — heavier files last so the API is responsive quickly:
 6. `pypsa_network.nc` — large, takes a few seconds
 
 All loaded once into memory at FastAPI startup. Never reloaded per request.
+
+---
+
+## Country Coverage
+
+The map (`frontend/public/europe.geojson`) draws **52 European countries**.
+Backend Ember data only covers **31** of them with prices.
+
+The 21 countries on the map without price data fall into two groups:
+
+### Real data center candidates (genuine gaps — fix later if needed)
+
+These ARE valid European countries that could host data centers. We just lack Ember price data.
+
+| ISO3 | Country | Carbon data? | Notes |
+|------|---------|--------------|-------|
+| ALB  | Albania | yes | |
+| BIH  | Bosnia and Herzegovina | yes | |
+| BLR  | Belarus | yes | sanctions/political risk in 2026 |
+| CYP  | Cyprus | yes | island grid, isolated |
+| ISL  | Iceland | yes | **already a major DC hub** — geothermal, free cooling |
+| KOS  | Kosovo | no | |
+| MDA  | Moldova | yes | |
+| MLT  | Malta | yes | small island grid |
+| RUS  | Russia | yes | sanctions/political risk in 2026 |
+| TUR  | Turkey | no | |
+| UKR  | Ukraine | yes | active conflict in 2026, not viable |
+
+**If a user asks about any of these:** be honest that we have no price data, do NOT make up numbers. Iceland in particular is a real omission worth fixing if a user cares.
+
+### Micro-states (skip — not real DC candidates)
+
+Too small for hyperscale data centers and Ember rightly omits them.
+
+`ALD` Åland, `AND` Andorra, `FRO` Faeroe Islands, `GGY` Guernsey, `IMN` Isle of Man, `JEY` Jersey, `LIE` Liechtenstein, `MCO` Monaco, `SMR` San Marino, `VAT` Vatican.
+
+### How the frontend handles these
+
+Countries without backend data render gray on the map.
+Country click → info panel shows "no data available" rather than fabricating values.
+
+---
+
+## Bug Rule (For This Project)
+
+If a country exists in `europe.geojson` but is missing from backend data, that is **expected behavior**, not a bug. Only log a bug in `docs/bugs.md` if a country we SHOULD have data for is missing (e.g. Germany suddenly disappears from prices).
