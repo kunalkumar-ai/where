@@ -1,46 +1,63 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { COUNTRIES, overallScore, subScores, tradeoff, type Weights } from "@/lib/mock-data";
-import { Sparkles, Search, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { Sparkles, Search, TrendingUp, Loader2, AlertTriangle } from "lucide-react";
+
+import {
+  fetchRecommendation,
+  type RecommendPriorities,
+  type RecommendationResponse,
+  type CountryScore,
+} from "@/lib/api/client";
+import { countryDisplay } from "@/lib/countries";
 
 export const Route = createFileRoute("/recommender")({
   head: () => ({
     meta: [
       { title: "Recommender · where" },
-      { name: "description", content: "Rank European countries for new data center capacity by cost, carbon, grid, and connectivity." },
-      { property: "og:title", content: "Recommender · where" },
-      { property: "og:description", content: "Rank European countries for new data center capacity by cost, carbon, grid, and connectivity." },
+      {
+        name: "description",
+        content:
+          "Rank European countries for new data center capacity by cost, carbon, clean energy, and grid availability.",
+      },
     ],
   }),
   component: RecommenderPage,
 });
 
+type Submitted = { mw: number; priorities: RecommendPriorities };
+
 function RecommenderPage() {
-  const [mw, setMw] = useState(120);
-  const [w, setW] = useState<Weights>({ cost: 30, carbon: 30, grid: 25, connectivity: 15 });
-  const [submitted, setSubmitted] = useState<{ mw: number; w: Weights } | null>({ mw: 120, w });
+  const [mw, setMw] = useState(100);
+  const [priorities, setPriorities] = useState<RecommendPriorities>({
+    cost: 30,
+    carbon: 30,
+    clean: 20,
+    grid: 20,
+  });
+  const [submitted, setSubmitted] = useState<Submitted | null>(null);
+  const [result, setResult] = useState<RecommendationResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const total = w.cost + w.carbon + w.grid + w.connectivity;
+  const total = priorities.cost + priorities.carbon + priorities.clean + priorities.grid;
 
-  const ranked = useMemo(() => {
-    if (!submitted) return [];
-    return [...COUNTRIES]
-      .map((c) => ({ c, score: overallScore(c, submitted.w), sub: subScores(c) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-  }, [submitted]);
+  const handleSetSlider = (k: keyof RecommendPriorities, v: number) => {
+    setPriorities((p) => ({ ...p, [k]: v }));
+  };
 
-  const setSlider = (k: keyof Weights, v: number) => {
-    // rebalance to keep sum=100
-    const others = (Object.keys(w) as (keyof Weights)[]).filter((x) => x !== k);
-    const remaining = Math.max(0, 100 - v);
-    const oldOthersSum = others.reduce((s, x) => s + w[x], 0) || 1;
-    const next: Weights = { ...w, [k]: v };
-    others.forEach((x) => { next[x] = Math.round((w[x] / oldOthersSum) * remaining); });
-    // fix rounding
-    const diff = 100 - (next.cost + next.carbon + next.grid + next.connectivity);
-    next[others[0]] += diff;
-    setW(next);
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError(null);
+    setSubmitted({ mw, priorities });
+    try {
+      const r = await fetchRecommendation({ mw, priorities, top_n: 5, explain: true });
+      setResult(r);
+    } catch (e) {
+      setError((e as Error).message);
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,38 +72,86 @@ function RecommenderPage() {
               <input
                 type="number"
                 min={1}
-                max={500}
+                max={2000}
                 value={mw}
-                onChange={(e) => setMw(Math.max(1, Math.min(500, Number(e.target.value) || 0)))}
-                className="flex-1 bg-transparent px-3 py-2 text-sm tabular outline-none"
+                onChange={(e) =>
+                  setMw(Math.max(1, Math.min(2000, Number(e.target.value) || 0)))
+                }
+                className="flex-1 bg-transparent px-3 py-2 text-sm tabular-nums outline-none"
               />
-              <span className="flex items-center border-l border-border bg-secondary/40 px-3 text-xs text-muted-foreground">MW</span>
+              <span className="flex items-center border-l border-border bg-secondary/40 px-3 text-xs text-muted-foreground">
+                MW
+              </span>
             </div>
-            <input type="range" min={1} max={500} value={mw} onChange={(e) => setMw(Number(e.target.value))} className="mt-3 w-full accent-[--color-primary]" />
+            <input
+              type="range"
+              min={1}
+              max={500}
+              value={mw}
+              onChange={(e) => setMw(Number(e.target.value))}
+              className="mt-3 w-full accent-[--color-primary]"
+            />
           </div>
 
           <div>
             <div className="flex items-center justify-between">
               <Label>Priority weighting</Label>
-              <span className={"text-[11px] tabular " + (total === 100 ? "text-success" : "text-warning")}>{total}% / 100%</span>
+              <span
+                className={
+                  "text-[11px] tabular-nums " +
+                  (total === 100 ? "text-success" : "text-muted-foreground")
+                }
+              >
+                {total} / 100
+              </span>
             </div>
             <div className="mt-3 space-y-3">
-              <WeightSlider label="Cost" value={w.cost} onChange={(v) => setSlider("cost", v)} />
-              <WeightSlider label="Carbon" value={w.carbon} onChange={(v) => setSlider("carbon", v)} />
-              <WeightSlider label="Grid Availability" value={w.grid} onChange={(v) => setSlider("grid", v)} />
-              <WeightSlider label="Connectivity" value={w.connectivity} onChange={(v) => setSlider("connectivity", v)} />
+              <WeightSlider
+                label="Cost"
+                hint="Power price €/MWh"
+                value={priorities.cost}
+                onChange={(v) => handleSetSlider("cost", v)}
+              />
+              <WeightSlider
+                label="Carbon"
+                hint="gCO₂/kWh"
+                value={priorities.carbon}
+                onChange={(v) => handleSetSlider("carbon", v)}
+              />
+              <WeightSlider
+                label="Clean Energy"
+                hint="Nuclear + renewables %"
+                value={priorities.clean}
+                onChange={(v) => handleSetSlider("clean", v)}
+              />
+              <WeightSlider
+                label="Grid Availability"
+                hint="Net exporter status"
+                value={priorities.grid}
+                onChange={(v) => handleSetSlider("grid", v)}
+              />
             </div>
           </div>
 
           <button
-            onClick={() => setSubmitted({ mw, w })}
-            className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
-            <Search className="h-4 w-4" /> Find Best Locations
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Analysing…
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4" /> Find Best Locations
+              </>
+            )}
           </button>
 
           <div className="rounded-sm border border-border bg-card p-3 text-[11px] text-muted-foreground">
-            Model evaluates {COUNTRIES.length} European jurisdictions across day-ahead pricing, grid CO₂, TSO headroom, and tier-1 fibre. Updated every 15 minutes.
+            Weights are normalised — they don't need to sum to 100. Empty weights = equal.
+            Backend scores all European countries with full Ember data, then ranks the top 5.
           </div>
         </div>
       </aside>
@@ -97,57 +162,63 @@ function RecommenderPage() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Site Recommendations</h1>
             <p className="text-[12px] text-muted-foreground">
-              {submitted ? <>Top 5 of {COUNTRIES.length} countries · {submitted.mw} MW · weights cost {submitted.w.cost}% / carbon {submitted.w.carbon}% / grid {submitted.w.grid}% / connectivity {submitted.w.connectivity}%</> : "Configure the brief and run a search"}
+              {submitted && result ? (
+                <>
+                  Top {result.rankings.length} of {result.countries_evaluated} countries ·{" "}
+                  {submitted.mw} MW · grid demand {result.grid_demand_mw} MW · ~
+                  {(result.annual_mwh / 1000).toFixed(0)} GWh/year
+                </>
+              ) : submitted ? (
+                <>Running analysis for {submitted.mw} MW…</>
+              ) : (
+                "Configure the brief and run a search"
+              )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-sm border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground">
-              MCDA v2.1 · ENTSO-E + EMaps · 14 Jun 14:00 CET
-            </span>
-            <div className="flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
-              <TrendingUp className="h-3 w-3 text-primary" /> Weighted multi-criteria
-            </div>
+          <div className="flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-1.5 text-[11px] text-muted-foreground">
+            <TrendingUp className="h-3 w-3 text-primary" /> Weighted multi-criteria
           </div>
         </div>
 
         <div className="space-y-3 p-6">
-          {ranked.map((r, i) => (
-            <article key={r.c.code} className="grid grid-cols-[64px_1fr_220px] items-center gap-5 rounded-sm border border-border bg-card p-5 transition-colors hover:border-primary/30">
-              <div className="text-center">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rank</div>
-                <div className={"mt-1 text-3xl font-bold tabular " + (i === 0 ? "text-primary" : "text-foreground")}>#{i + 1}</div>
-              </div>
+          {!submitted && !loading && (
+            <div className="rounded-sm border border-dashed border-border p-8 text-center text-[12px] text-muted-foreground">
+              Set capacity and priority weights on the left, then run a search.
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-sm border border-destructive/40 bg-destructive/10 p-3 text-[12px] text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-xl">{r.c.flag}</span>
-                  <h3 className="text-base font-semibold tracking-tight">{r.c.name}</h3>
-                  <span className="text-[11px] text-muted-foreground tabular">€{r.c.powerPrice}/MWh · {r.c.carbon}gCO₂ · {r.c.grid}</span>
-                </div>
-                <p className="mt-1 text-[12px] text-muted-foreground">{tradeoff(r.c)}</p>
-                <div className="mt-3 grid grid-cols-4 gap-3">
-                  <SubBar label="Cost" v={r.sub.cost} />
-                  <SubBar label="Carbon" v={r.sub.carbon} />
-                  <SubBar label="Grid" v={r.sub.grid} />
-                  <SubBar label="Connectivity" v={r.sub.connectivity} />
-                </div>
+                <div className="font-semibold">API error</div>
+                <div className="opacity-80">{error}</div>
               </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Overall</div>
-                <div className={"text-4xl font-bold tabular " + (i === 0 ? "text-primary" : "text-foreground")}>{r.score.toFixed(1)}</div>
-                <div className="text-[11px] text-muted-foreground">/ 100</div>
-              </div>
-            </article>
+            </div>
+          )}
+
+          {loading && !result && (
+            <div className="rounded-sm border border-border bg-card p-8 text-center text-[12px] text-muted-foreground">
+              <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-primary" />
+              Scoring countries and generating analysis…
+            </div>
+          )}
+
+          {result?.rankings.map((r, i) => (
+            <RankingCard key={r.iso3} rank={i + 1} score={r} />
           ))}
 
-          {submitted && ranked.length > 0 && (
+          {result?.explanation && (
             <div className="mt-6 rounded-sm border border-primary/30 bg-primary/5 p-5">
               <div className="flex items-center gap-2 text-primary">
                 <Sparkles className="h-3.5 w-3.5" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">AI Analysis</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
+                  AI Analysis
+                </span>
               </div>
-              <p className="mt-2 text-[13px] leading-relaxed text-foreground/90">
-                For a {submitted.mw}MW load with your weighting profile, <strong>{ranked[0].c.name}</strong> emerges as the lead candidate driven by {ranked[0].sub.carbon > 80 ? "near-zero carbon intensity" : "balanced grid economics"} and {ranked[0].sub.grid > 70 ? "ample TSO headroom" : "manageable interconnect timelines"}. {ranked[1].c.name} and {ranked[2].c.name} are credible fallbacks if Nordic permitting risk is a concern. Avoid {COUNTRIES.find(c => c.grid === "Full")?.name ?? "saturated markets"} for new builds &gt; 50MW — connection queues exceed 36 months. Consider a phased Nordic-anchor with a {ranked[3]?.c.name ?? "secondary"} backup PPA layer.
-              </p>
+              <div className="prose prose-invert prose-sm mt-2 max-w-none text-[13px] leading-relaxed text-foreground/90 whitespace-pre-line">
+                {result.explanation}
+              </div>
             </div>
           )}
         </div>
@@ -156,27 +227,106 @@ function RecommenderPage() {
   );
 }
 
+function RankingCard({ rank, score }: { rank: number; score: CountryScore }) {
+  const info = countryDisplay(score.iso3);
+  const m = score.metrics;
+  return (
+    <article
+      className={
+        "grid grid-cols-[64px_1fr_220px] items-center gap-5 rounded-sm border bg-card p-5 transition-colors hover:border-primary/30 " +
+        (rank === 1 ? "border-primary/40" : "border-border")
+      }
+    >
+      <div className="text-center">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Rank</div>
+        <div
+          className={
+            "mt-1 text-3xl font-bold tabular-nums " +
+            (rank === 1 ? "text-primary" : "text-foreground")
+          }
+        >
+          #{rank}
+        </div>
+      </div>
+      <div>
+        <div className="flex items-baseline gap-3">
+          <span className="text-xl">{info.flag}</span>
+          <h3 className="text-base font-semibold tracking-tight">{info.name}</h3>
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            €{m.price_eur_mwh.toFixed(0)}/MWh · {m.carbon_gco2_kwh.toFixed(0)} gCO₂ ·{" "}
+            {m.clean_share_pct.toFixed(0)}% clean · {m.grid_status}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          <SubBar label="Cost" v={score.sub_scores.cost} />
+          <SubBar label="Carbon" v={score.sub_scores.carbon} />
+          <SubBar label="Clean" v={score.sub_scores.clean} />
+          <SubBar label="Grid" v={score.sub_scores.grid} />
+        </div>
+      </div>
+      <div className="text-right">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Overall</div>
+        <div
+          className={
+            "text-4xl font-bold tabular-nums " +
+            (rank === 1 ? "text-primary" : "text-foreground")
+          }
+        >
+          {score.overall.toFixed(1)}
+        </div>
+        <div className="text-[11px] text-muted-foreground">/ 100</div>
+      </div>
+    </article>
+  );
+}
+
 function SectionHeader({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 border-b border-border px-5 py-3 text-primary">
       {icon}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{children}</h2>
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {children}
+      </h2>
     </div>
   );
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{children}</label>;
+  return (
+    <label className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      {children}
+    </label>
+  );
 }
 
-function WeightSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function WeightSlider({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <div>
       <div className="flex items-center justify-between text-[12px]">
-        <span className="text-foreground">{label}</span>
-        <span className="tabular text-primary">{value}%</span>
+        <div>
+          <span className="text-foreground">{label}</span>
+          <span className="ml-2 text-[10px] text-muted-foreground">{hint}</span>
+        </div>
+        <span className="tabular-nums text-primary">{value}</span>
       </div>
-      <input type="range" min={0} max={100} value={value} onChange={(e) => onChange(Number(e.target.value))} className="mt-1 w-full accent-[--color-primary]" />
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 w-full accent-[--color-primary]"
+      />
     </div>
   );
 }
@@ -186,10 +336,10 @@ function SubBar({ label, v }: { label: string; v: number }) {
     <div>
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>{label}</span>
-        <span className="tabular text-foreground">{Math.round(v)}</span>
+        <span className="tabular-nums text-foreground">{Math.round(v)}</span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-secondary">
-        <div className="h-full bg-primary" style={{ width: `${v}%` }} />
+        <div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, v))}%` }} />
       </div>
     </div>
   );
