@@ -123,7 +123,15 @@ where/
    - Existing data centers (dots)
 6. Click a country → popup showing all metrics
 
-**Done when:** Map renders with all layers, country click shows real data.
+**Frontend integration approach (hybrid):**
+- Keep the Lovable-generated shell as-is — sidebar with layer toggles, country info panel, navigation, dark theme, all routes
+- Replace ONLY the central stylized map area with a real MapLibre GL JS map
+- Use a free tile source (e.g. MapTiler free tier or OpenFreeMap) — no API key in code
+- Replace `frontend/src/lib/mock-data.ts` with an API client that fetches from `/api/map-data/all`
+- Country shapes come from a Natural Earth GeoJSON file shipped in `frontend/public/`
+- Layers are MapLibre fill layers colored by data values from the API
+
+**Done when:** Map renders with real European country shapes, all four layers toggleable, country click shows real data from the FastAPI backend.
 
 ---
 
