@@ -74,54 +74,77 @@ Carbon score per location. Critical for sustainability-focused clients.
 - Export as CSV filtered to European countries, latest year
 
 **Format:**
-- CSV file
-- Key columns: `country`, `year`, `carbon_intensity_gco2_kwh`, `clean_share_pct`
+- CSV file with long format — one row per (country, year, variable)
+- Key columns: `Area`, `ISO 3 code`, `Year`, `Category`, `Variable`, `Unit`, `Value`
+- Filter on `Continent == "Europe"` to get European countries only
+
+**Two extractions from this one file:**
+
+1. **Carbon intensity** — rows where `Variable == "CO2 intensity"` → `gCO₂/kWh` per country, latest year
+2. **Generation mix** — rows where `Category == "Electricity generation"`, `Unit == "%"` → fuel breakdown per country:
+   - `Clean` (% from nuclear + renewables)
+   - `Renewables` (% from non-nuclear clean)
+   - Individual fuels: `Coal`, `Gas`, `Nuclear`, `Hydro`, `Wind`, `Solar`, `Bioenergy`, `Other Fossil`, `Other Renewables`
 
 **Reference values (sanity check):**
-| Country | Approx Carbon Intensity |
-|---|---|
-| Norway | ~20 gCO₂/kWh |
-| France | ~50 gCO₂/kWh |
-| Germany | ~350 gCO₂/kWh |
-| Poland | ~650 gCO₂/kWh |
+| Country | Approx Carbon | Approx Mix |
+|---|---|---|
+| Norway | ~20 gCO₂/kWh | ~89% hydro, ~9% wind |
+| France | ~50 gCO₂/kWh | ~69% nuclear, ~10% hydro |
+| Germany | ~330 gCO₂/kWh | mixed — coal/gas + renewables ramp |
+| Poland | ~590 gCO₂/kWh | ~30%+ coal |
 
-Use these to validate data loaded correctly. If Norway shows >100, something is wrong.
+Use these to validate data loaded correctly. If Norway shows >100 gCO₂/kWh or France shows <30% nuclear, something is wrong.
 
 **Gotchas:**
 - Same country coverage limitation as prices — validate before use
 - Carbon intensity changes year to year — always use latest full year
+- The file has ~20 different Variables; filter carefully or you'll mix metrics
 
 **Where to store locally:**
-`backend/data/ember_carbon.csv`
+`backend/data/ember_yearly_europe.csv`
 
 ---
 
-## 4. Grid Congestion — Ember Grids for Data Centres
+## 4. Grid Interconnection — Ember Europe Electricity Interconnection Data
 
 **What it is:**
-A dedicated Ember dataset built specifically for data center siting. Identifies where there is available grid capacity vs congestion across Europe.
+Cross-border electricity flow and capacity data across European countries — who exports, who imports, how much, and via what borders.
 
-**What it gives us:**
-- Available grid capacity by region (can you actually connect here?)
-- Grid connection costs (€1M to €100M+ depending on location)
-- Connection timelines (2–10 years in some countries)
+**What it gives us (Phase 1):**
+Per country: a net position (TWh/year exported minus imported) and a derived status — **net exporter**, **balanced**, or **net importer**.
+
+**What we don't use yet (potential Phase 2):**
+- Cross-border flows file (which country sends power to which)
+- NTC (Net Transfer Capacity) per border — would show specific grid bottlenecks
+- Peak demand per country
+- 2030 / 2040 forecast scenarios
 
 **Where to get it:**
-- Ember Grids for data centres report
-- ember-climate.org — search "grids for data centres"
-- Data may need manual extraction from report into a structured JSON
+- ember-climate.org → "Europe Electricity Interconnection Data" (Datasets card, not the interactive Tool)
+- Download as a zip
 
 **Format:**
-- Likely PDF report with tables — extract key data manually into:
-`backend/data/grid_congestion.json`
+- Folder structure under `backend/data/europe_interconnection_data/`
+- File we actually use: `Country indicators/country_monthly_chart_2024.csv`
+- Key columns: `Country` (full name), `Month`, `RES-E` (renewable share %), `NET-P` (net position TWh)
 
-```json
-{
-  "IE": { "status": "congested", "connection_years": 7, "note": "Dublin grid full" },
-  "FI": { "status": "available", "connection_years": 2, "note": "Good headroom" },
-  ...
-}
-```
+**Threshold for status (chosen by us):**
+- `NET-P > +5 TWh/year` → `exporter` (sends meaningful surplus to neighbors)
+- `-5 ≤ NET-P ≤ +5 TWh/year` → `balanced` (production ≈ consumption)
+- `NET-P < -5 TWh/year` → `importer` (relies on neighbors)
+
+**Why this matters for data centers:**
+- **Exporter** → grid likely has surplus capacity, often a better target for new big loads (Norway, France, Sweden)
+- **Importer** → grid often near capacity, harder to plug a new 100MW load (Germany, Belgium, Italy)
+- **Balanced** → case by case
+
+**Gotchas:**
+- File uses full country names (Austria, Belgium, etc.) — we map to ISO3 in the loader (see `COUNTRY_NAME_TO_ISO3` in `data_loader.py`). New countries Ember adds will silently disappear from results until added to the map.
+- The ±5 TWh threshold is a project choice, not a physical rule. Revisit if it produces misleading labels for a specific country.
+
+**Where to store locally:**
+`backend/data/europe_interconnection_data/` (folder, keep structure as Ember ships it)
 
 **Gotchas:**
 - This is the most critical factor — cheap clean power means nothing if you cannot connect
