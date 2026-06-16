@@ -58,3 +58,46 @@ export async function fetchInterconnection(): Promise<Record<string, Interconnec
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
+
+export interface RecommendPriorities {
+  cost: number;
+  carbon: number;
+  clean: number;
+  grid: number;
+}
+
+export interface CountryScore {
+  iso3: string;
+  overall: number;
+  sub_scores: { cost: number; carbon: number; clean: number; grid: number };
+  metrics: {
+    price_eur_mwh: number;
+    carbon_gco2_kwh: number;
+    clean_share_pct: number;
+    grid_status: string;
+    net_position_twh: number;
+  };
+}
+
+export interface RecommendationResponse {
+  grid_demand_mw: number;
+  annual_mwh: number;
+  countries_evaluated: number;
+  rankings: CountryScore[];
+  explanation: string | null;
+}
+
+export async function fetchRecommendation(body: {
+  mw: number;
+  priorities: RecommendPriorities;
+  top_n?: number;
+  explain?: boolean;
+}): Promise<RecommendationResponse> {
+  const res = await fetch(`${API_BASE}/api/recommend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
