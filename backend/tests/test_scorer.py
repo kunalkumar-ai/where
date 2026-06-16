@@ -53,6 +53,27 @@ def test_scorer_with_empty_priorities_uses_equal_weights():
     assert len(rec.rankings) > 0
 
 
+def test_scorer_bounds_span_full_range_with_real_data():
+    """Cheapest country must score 100 on cost, most expensive must score 0.
+
+    This validates the data-derived bounds — proves the full 0-100
+    range is being used, not compressed into a narrow band.
+    """
+    rec = score_countries(mw=100, priorities={"cost": 1.0}, top_n=30)
+    top = rec.rankings[0]
+    bottom = rec.rankings[-1]
+    assert top.sub_scores["cost"] == 100.0, f"Top expected 100, got {top.sub_scores['cost']}"
+    assert bottom.sub_scores["cost"] == 0.0, f"Bottom expected 0, got {bottom.sub_scores['cost']}"
+
+
+def test_scorer_carbon_bounds_span_full_range_with_real_data():
+    rec = score_countries(mw=100, priorities={"carbon": 1.0}, top_n=30)
+    top = rec.rankings[0]
+    bottom = rec.rankings[-1]
+    assert top.sub_scores["carbon"] == 100.0
+    assert bottom.sub_scores["carbon"] == 0.0
+
+
 def test_recommendation_to_dict_is_json_safe():
     import json
     rec = score_countries(mw=50, priorities={"cost": 0.5, "carbon": 0.5})

@@ -7,8 +7,6 @@ from config import PUE, LOAD_FACTOR
 from services.data_loader import get_all_country_data
 
 
-PRICE_MIN, PRICE_MAX = 30.0, 160.0
-CARBON_MIN, CARBON_MAX = 10.0, 700.0
 GRID_STATUS_SCORE: dict[str, float] = {
     "exporter": 100.0,
     "balanced": 60.0,
@@ -41,20 +39,39 @@ def score_countries(
 
     Priorities expected keys: cost, carbon, clean, grid.
     Values are relative weights — they will be normalised to sum to 1.
+
+    Cost and carbon bounds are derived from the actual data set on every
+    call so the full 0–100 score range is used (cheapest country == 100,
+    most expensive == 0). No magic numbers.
     """
     weights = _normalise_weights(priorities)
     all_data = get_all_country_data()
 
+    eligible = {
+        iso: c
+        for iso, c in all_data.items()
+        if c.get("generation") and c.get("interconnection")
+    }
+
+    if not eligible:
+        return Recommendation(
+            grid_demand_mw=round(mw * PUE, 1),
+            annual_mwh=round(mw * PUE * 8760 * LOAD_FACTOR, 0),
+            countries_evaluated=0,
+            rankings=[],
+        )
+
+    price_min, price_max = _data_bounds(c["price_eur_mwh"] for c in eligible.values())
+    carbon_min, carbon_max = _data_bounds(c["carbon_gco2_kwh"] for c in eligible.values())
+
     scores: list[CountryScore] = []
-    for iso3, c in all_data.items():
-        gen = c.get("generation") or {}
-        interconn = c.get("interconnection") or {}
-        if not gen or not interconn:
-            continue
+    for iso3, c in eligible.items():
+        gen = c["generation"]
+        interconn = c["interconnection"]
 
         sub = {
-            "cost": _invert_normalise(c["price_eur_mwh"], PRICE_MIN, PRICE_MAX),
-            "carbon": _invert_normalise(c["carbon_gco2_kwh"], CARBON_MIN, CARBON_MAX),
+            "cost": _invert_normalise(c["price_eur_mwh"], price_min, price_max),
+            "carbon": _invert_normalise(c["carbon_gco2_kwh"], carbon_min, carbon_max),
             "clean": float(gen["clean_share_pct"]),
             "grid": GRID_STATUS_SCORE.get(interconn.get("status", ""), 0.0),
         }
@@ -100,6 +117,17 @@ def _normalise_weights(priorities: dict[str, float]) -> dict[str, float]:
     if total == 0:
         return {k: 0.25 for k in keys}
     return {k: v / total for k, v in raw.items()}
+
+
+def _data_bounds(values) -> tuple[float, float]:
+    """Return (min, max) from an iterable; add a tiny epsilon if all equal."""
+    floats = [float(v) for v in values]
+    if not floats:
+        return 0.0, 1.0
+    lo, hi = min(floats), max(floats)
+    if hi == lo:
+        hi = lo + 1.0
+    return lo, hi
 
 
 def _invert_normalise(value: float, min_val: float, max_val: float) -> float:
