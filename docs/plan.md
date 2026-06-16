@@ -140,44 +140,63 @@ where/
 
 ---
 
-### Phase 2: Location Recommender
+### Phase 2: Location Recommender ✅
 **Goal:** User inputs MW + priorities, gets ranked locations with AI explanation.
 
-1. Build `scorer.py`:
-   - Input: MW size + priority weights (cost, carbon, congestion, connectivity)
-   - Apply IEA formula: `grid_demand = MW × PUE (1.4)`
-   - Score each country 0–100 across all factors
-   - Weighted sum → final score → ranked list
-2. Build `explainer.py`:
-   - Takes top 5 scored countries + their raw metrics
-   - Calls Claude API to generate plain-English trade-off explanation
-3. Build `/api/recommend` endpoint
-4. Build Recommender UI in React:
-   - Form: MW input + priority sliders (cost / carbon / connectivity)
-   - Results: ranked cards with score breakdown + AI explanation
-   - Map pins for top results
+**How it actually got built:**
 
-**Done when:** User enters 100MW, gets ranked list of European countries with explanation.
+1. **`backend/services/scorer.py`** — pure ranking engine:
+   - Inputs: MW + relative priority weights for cost / carbon / clean / grid (these are normalised so they sum to 1; the slider numbers don't need to add up to 100)
+   - For each of 28 countries: compute four 0–100 sub-scores
+     - **cost** = invert-normalise price between actual data min and max (cheapest country → 100, most expensive → 0)
+     - **carbon** = invert-normalise gCO₂/kWh the same way
+     - **clean** = raw `clean_share_pct` from Ember generation data
+     - **grid** = `exporter` 100 / `balanced` 60 / `importer` 25 (status from Ember interconnection)
+   - `overall = Σ (weight_i × sub_score_i)`, then sort descending, return top N
+   - Bounds are recomputed from the current dataset on every call (no magic numbers), so the full 0–100 range always gets used
+
+2. **`backend/services/explainer.py` (`explain_recommendation`)**:
+   - Builds a structured prompt with MW, normalised weights as %, PUE-adjusted grid demand, annual MWh, and the top 3 countries with their raw metrics and sub-scores
+   - Sends to Claude (`claude-sonnet-4-5`) with an "energy consultant" system prompt
+   - Caller is dependency-injected so tests don't hit the live API
+
+3. **`POST /api/recommend`** — Pydantic validates inputs, runs scorer + explainer, returns the JSON
+
+4. **Frontend** (`frontend/src/routes/recommender.tsx`):
+   - MW input + 4 priority sliders (cost / carbon / clean / grid)
+   - On submit: POST → loading state → render ranked cards (rank, flag, metrics, 4 sub-score bars, overall) + AI Analysis panel
+
+**Real test:** `100MW, priorities 30/30/20/20` → France wins, optimizer cites €47.2M annual power vs €76.4M for Norway.
 
 ---
 
-### Phase 3: Power Supply Planner
+### Phase 3: Power Supply Planner ✅
 **Goal:** User picks a location, gets optimized power mix (spot / PPA / on-site).
 
-1. Build `optimizer.py`:
-   - Input: location, MW demand, carbon target %, contract years
-   - Model 3 supply options: spot market, PPA, on-site generation
-   - Run cost + carbon projections across different mixes
-   - Return optimal split that minimizes cost subject to carbon constraint
-2. Extend `explainer.py` to narrate power mix recommendation
-3. Build `/api/plan` endpoint
-4. Build Planner UI in React:
-   - Form: location picker, MW, carbon target %, contract horizon (years)
-   - Output: recommended mix breakdown (spot / PPA / on-site %)
-   - Chart: cost vs carbon trade-off curve (Recharts)
-   - AI narrative explanation
+**How it actually got built:**
 
-**Done when:** User picks Finland + 100MW, gets power mix recommendation with cost/carbon projections.
+1. **`backend/services/optimizer.py`** — brute-force grid search:
+   - Three sources modelled with hardcoded constants:
+     - **Spot**: country's `price_eur_mwh`, country's `carbon_gco2_kwh`, no cap
+     - **PPA** (wind/solar contract): €35/MWh, 10 gCO₂/kWh, max 80% of demand
+     - **On-site** (solar + battery): €70/MWh, 30 gCO₂/kWh, max 25% of demand
+   - The loop: enumerate every `(onsite, ppa)` combination in 5% steps, derive `spot = 1 - onsite - ppa`, drop invalid combos, compute `clean_pct` and `blended_price`. Keep the cheapest mix that meets the user's clean target.
+   - ~102 candidate mixes per call — microseconds. No solver/LP needed at this granularity.
+   - Returns `PlanResult` with mix, achieved clean %, achieved carbon, blended €/MWh, annual €M, plus the country baseline for comparison
+
+2. **`backend/services/explainer.py` (`explain_power_plan`)**:
+   - Builds a prompt with country baseline, the optimised mix vs 100% spot, achieved clean / carbon, blended price
+   - Claude returns a 3-sentence narrative + concrete next step (PPA RfP, grid connection, etc.)
+
+3. **`POST /api/plan`** — Pydantic validates inputs; returns the optimised plan + AI narrative
+
+4. **Frontend** (`frontend/src/routes/planner.tsx`):
+   - Inputs: country dropdown (sorted by name), MW, clean-energy target slider, contract horizon
+   - Results: power mix donut (Recharts), three metric cards (annual cost, carbon, clean %), bar chart "100% spot vs optimised mix" highlighting €M/yr saved, plus AI Analysis panel
+
+**Real test:** `Poland 100MW, 95% clean target` → 0% spot + 80% PPA + 20% on-site at €42/MWh blended, saves ~€58M/year vs Poland's expensive dirty spot.
+
+**Surprising real-world insight from the data:** PPA at €35/MWh undercuts every European spot price in our dataset, so the optimizer leans PPA-heavy even for already-clean countries like Norway — cost beats carbon as the dominant signal once cheap PPAs are on the table.
 
 ---
 
