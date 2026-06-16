@@ -101,3 +101,47 @@ export async function fetchRecommendation(body: {
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
 }
+
+export interface PowerMix {
+  spot: number;
+  ppa: number;
+  onsite: number;
+}
+
+export interface PlanResponse {
+  location: string;
+  mw: number;
+  grid_demand_mw: number;
+  annual_mwh: number;
+  target_clean_pct: number;
+  contract_years: number;
+  feasible: boolean;
+  mix: PowerMix;
+  achieved_clean_pct: number;
+  achieved_carbon_gco2_kwh: number;
+  blended_price_eur_mwh: number;
+  annual_cost_eur: number;
+  annual_cost_meur: number;
+  country_metrics: {
+    price_eur_mwh: number;
+    carbon_gco2_kwh: number;
+    clean_share_pct: number;
+  };
+  explanation: string | null;
+}
+
+export async function fetchPlan(body: {
+  location: string;
+  mw: number;
+  target_clean_pct: number;
+  contract_years: number;
+  explain?: boolean;
+}): Promise<PlanResponse> {
+  const res = await fetch(`${API_BASE}/api/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
