@@ -2,7 +2,13 @@ import pytest
 
 from services.data_loader import load_all_data
 from services.scorer import score_countries
-from services.explainer import build_prompt, explain_recommendation
+from services.optimizer import plan_power_supply
+from services.explainer import (
+    build_prompt,
+    build_plan_prompt,
+    explain_recommendation,
+    explain_power_plan,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -63,3 +69,35 @@ def test_build_prompt_lists_concrete_metrics_per_country(carbon_priority_recomme
     assert "€" in prompt
     assert "Clean energy" in prompt
     assert "Grid" in prompt
+
+
+def test_build_plan_prompt_includes_location_and_target():
+    plan = plan_power_supply(location="DEU", mw=100, target_clean_pct=90, contract_years=10)
+    prompt = build_plan_prompt(plan)
+    assert "DEU" in prompt
+    assert "100MW" in prompt
+    assert "90% clean" in prompt
+    assert "10-year" in prompt
+
+
+def test_build_plan_prompt_includes_mix_percentages():
+    plan = plan_power_supply(location="POL", mw=100, target_clean_pct=95, contract_years=10)
+    prompt = build_plan_prompt(plan)
+    assert "Spot market:" in prompt
+    assert "PPA" in prompt
+    assert "On-site" in prompt
+    assert "Annual cost" in prompt
+
+
+def test_explain_power_plan_uses_injected_caller():
+    plan = plan_power_supply(location="FRA", mw=100, target_clean_pct=90, contract_years=10)
+    captured = {}
+
+    def fake_caller(system: str, prompt: str) -> str:
+        captured["prompt"] = prompt
+        return "  PPA is the right call here.  "
+
+    result = explain_power_plan(plan, caller=fake_caller)
+    assert result == "PPA is the right call here."
+    assert "FRA" in captured["prompt"]
+    assert "100MW" in captured["prompt"]
